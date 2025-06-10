@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# VSCode settings
+.vscode/
+
+# PyCharm settings
+.idea/
+
+# Logs
+*.log
+*.out
+*.err
+logs/
+*.sqlite3
+
+# Database files (optional)
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*.sql
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
+
+# FastAPI CLI or generated files
+__fastapi__/
+.fastapi*
+
+# dotenv
+.env
+.env.*
+
+# OS-specific
+.DS_Store
+Thumbs.db
