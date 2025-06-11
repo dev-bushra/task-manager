@@ -1,26 +1,39 @@
-# app/crud.py
-from .database import database
-from .models import tasks
-from .schemas import TaskCreate, TaskUpdate
+from sqlalchemy.orm import Session
+from . import models, schemas
+from .database import SessionLocal
 
-async def get_all_tasks():
-    query = tasks.select()
-    return await database.fetch_all(query)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-async def get_task(task_id: int):
-    query = tasks.select().where(tasks.c.id == task_id)
-    return await database.fetch_one(query)
+# 🧠 CRUD functions
+def get_all_tasks(db: Session):
+    return db.query(models.Task).all()
 
-async def create_task(task: TaskCreate):
-    query = tasks.insert().values(**task.dict())
-    task_id = await database.execute(query)
-    return {**task.dict(), "id": task_id}
+def get_task(db: Session, task_id: int):
+    return db.query(models.Task).filter(models.Task.id == task_id).first()
 
-async def update_task(task_id: int, task: TaskUpdate):
-    query = tasks.update().where(tasks.c.id == task_id).values(**task.dict())
-    await database.execute(query)
-    return {**task.dict(), "id": task_id}
+def create_task(db: Session, task: schemas.TaskCreate):
+    db_task = models.Task(**task.dict())
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+    return db_task
 
-async def delete_task(task_id: int):
-    query = tasks.delete().where(tasks.c.id == task_id)
-    return await database.execute(query)
+def update_task(db: Session, task_id: int, task: schemas.TaskUpdate):
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if db_task:
+        for key, value in task.dict(exclude_unset=True).items():
+            setattr(db_task, key, value)
+        db.commit()
+        db.refresh(db_task)
+    return db_task
+
+def delete_task(db: Session, task_id: int):
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if db_task:
+        db.delete(db_task)
+        db.commit()

@@ -1,36 +1,44 @@
-# app/routers/tasks.py
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from .. import crud, schemas
+from ..database import SessionLocal
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @router.get("/", response_model=List[schemas.TaskInDB])
-async def read_tasks():
-    return await crud.get_all_tasks()
+def read_tasks(db: Session = Depends(get_db)):
+    return crud.get_all_tasks(db)
 
 @router.get("/{task_id}", response_model=schemas.TaskInDB)
-async def read_task(task_id: int):
-    task = await crud.get_task(task_id)
+def read_task(task_id: int, db: Session = Depends(get_db)):
+    task = crud.get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
 @router.post("/", response_model=schemas.TaskInDB)
-async def create(task: schemas.TaskCreate):
-    return await crud.create_task(task)
+def create(task: schemas.TaskCreate, db: Session = Depends(get_db)):
+    return crud.create_task(db, task)
 
 @router.put("/{task_id}", response_model=schemas.TaskInDB)
-async def update(task_id: int, task: schemas.TaskUpdate):
-    db_task = await crud.get_task(task_id)
+def update(task_id: int, task: schemas.TaskUpdate, db: Session = Depends(get_db)):
+    db_task = crud.get_task(db, task_id)
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return await crud.update_task(task_id, task)
+    return crud.update_task(db, task_id, task)
 
 @router.delete("/{task_id}")
-async def delete(task_id: int):
-    db_task = await crud.get_task(task_id)
+def delete(task_id: int, db: Session = Depends(get_db)):
+    db_task = crud.get_task(db, task_id)
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
-    await crud.delete_task(task_id)
+    crud.delete_task(db, task_id)
     return {"message": "Task deleted successfully"}
