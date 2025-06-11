@@ -1,6 +1,6 @@
 // 🔁 Update component to work with HTTP service
-
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
+import { Observable } from 'rxjs';
 import { TaskService } from '../../services/task.service';
 import { Task } from '../../models/task.model';
 
@@ -8,36 +8,25 @@ import { Task } from '../../models/task.model';
   selector: 'app-task-list',
   templateUrl: './task-list.component.html',
 })
-export class TaskListComponent implements OnInit {
+export class TaskListComponent {
+  tasksObservable$: Observable<Task[]> = this.taskService.tasksObservable$;
   newTask = '';
-  tasks: Task[] = [];
 
-  constructor(private taskService: TaskService) {}
-
-  ngOnInit(): void {
-    this.taskService.getTasks().subscribe((data) => (this.tasks = data));
-  }
+  constructor(private taskService: TaskService) { }
 
   addTask() {
-    const task = this.newTask.trim();
-    if (task) {
-      this.taskService.addTask(task).subscribe((newTask) => {
-        this.tasks.push(newTask);
-        this.newTask = '';
-      });
+    const trimmed = this.newTask.trim();
+    if (trimmed) {
+      this.taskService.addTask(trimmed);
+      this.newTask = '';
     }
   }
 
   toggleTask(id: number) {
-    this.taskService.toggleTask(id).subscribe((updated) => {
-      const index = this.tasks.findIndex((t) => t.id === id);
-      if (index !== -1) this.tasks[index] = updated;
-    });
+    this.taskService.toggleTask(id);
   }
 
   deleteTask(id: number) {
-    this.taskService.removeTask(id).subscribe(() => {
-      this.tasks = this.tasks.filter((task) => task.id !== id);
-    });
+    this.taskService.deleteTask(id);
   }
 }
