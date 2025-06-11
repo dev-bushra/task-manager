@@ -1,4 +1,9 @@
 <div class="m-0 p-6 bg-white shadow-lg rounded-xl min-h-[85vh] max-h-[85vh]">
+   <!-- 🟡 عرض شريط المزامنة عند وجود عناصر في قائمة الانتظار -->
+  <div *ngIf="syncing$ | async" class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-2 mb-4 rounded">
+    🔄 جاري المزامنة مع الخادم...
+  </div>
+  
   <!-- <h1 class="text-2xl font-bold mb-4 text-center flex items-center justify-center gap-2"><h1 class="inline font-semibold text-blue-600">📝 AB</h1> <span class="text-gray-200 text-sm font-extralight">|</span> <h1 class=" inline  font-light text-red-400">To Do</h1></h1> -->
 
   <div class="flex gap-2 mb-4">

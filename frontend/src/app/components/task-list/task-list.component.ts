@@ -1,4 +1,5 @@
 // 🔁 Update component to work with HTTP service
+// ✅ File: task-list.component.ts
 import { Component } from '@angular/core';
 import { Observable } from 'rxjs';
 import { TaskService } from '../../services/task.service';
@@ -10,9 +11,10 @@ import { Task } from '../../models/task.model';
 })
 export class TaskListComponent {
   tasksObservable$: Observable<Task[]> = this.taskService.tasksObservable$;
+  syncing$: Observable<boolean> = this.taskService.syncing$; // 🔄 مراقبة حالة المزامنة
   newTask = '';
 
-  constructor(private taskService: TaskService) { }
+  constructor(private taskService: TaskService) {}
 
   addTask() {
     const trimmed = this.newTask.trim();
@@ -30,3 +32,4 @@ export class TaskListComponent {
     this.taskService.deleteTask(id);
   }
 }
+

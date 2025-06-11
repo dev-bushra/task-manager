@@ -1,15 +1,12 @@
 // 🔁 Replace the current localStorage logic with real API calls
 // 🧠 هدفنا: تطبيق Offline-First بالكامل عبر LocalStorage + قائمة انتظار Sync
+// With conflict resolution + sync message broadcast
 
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, fromEvent, merge, of } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { Task } from '../models/task.model';
 import { environment } from 'src/environments/environment';
-import { filter } from 'rxjs/operators';
-
-const LOCAL_STORAGE_KEY = 'tasks';
-const SYNC_QUEUE_KEY = 'syncQueue';
 
 interface SyncAction {
   type: 'add' | 'toggle' | 'delete';
@@ -20,91 +17,71 @@ interface SyncAction {
 export class TaskService {
   private tasksSubject = new BehaviorSubject<Task[]>([]);
   public tasksObservable$: Observable<Task[]> = this.tasksSubject.asObservable();
+  public syncing$ = new BehaviorSubject<boolean>(false); // 🔄 expose syncing status
+
   private apiUrl = `${environment.apiUrl}/tasks`;
-  
-  private isOnline = navigator.onLine;
+  private syncQueue: SyncAction[] = [];
+  private localStorageKey = 'offline_tasks';
+  private syncQueueKey = 'sync_queue';
 
   constructor(private http: HttpClient) {
-    this.initConnectivityListeners();
-    this.loadTasks();
+    this.loadFromLocalStorage();
+    this.setupSyncOnReconnect();
+    this.syncWithServer();
   }
 
-  private initConnectivityListeners() {
-    // ✅ نراقب تغيّر حالة الاتصال
-    merge(
-      fromEvent(window, 'online'),
-      fromEvent(window, 'offline')
-    ).subscribe(() => {
-      this.isOnline = navigator.onLine;
-      if (this.isOnline) {
-        this.syncWithServer();
-      }
-    });
+  // ✅ Load from local storage
+  private loadFromLocalStorage(): void {
+    const tasks = JSON.parse(localStorage.getItem(this.localStorageKey) || '[]');
+    this.tasksSubject.next(tasks);
+    this.syncQueue = JSON.parse(localStorage.getItem(this.syncQueueKey) || '[]');
   }
 
-  private saveToLocalStorage(tasks: Task[]) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+  // ✅ Save tasks and sync queue
+  private saveToLocalStorage(): void {
+    localStorage.setItem(this.localStorageKey, JSON.stringify(this.tasksSubject.value));
+    localStorage.setItem(this.syncQueueKey, JSON.stringify(this.syncQueue));
   }
 
-  private loadFromLocalStorage(): Task[] {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+  // ✅ Sync trigger on reconnect
+  private setupSyncOnReconnect(): void {
+    fromEvent(window, 'online').subscribe(() => this.syncWithServer());
   }
 
-  private getSyncQueue(): SyncAction[] {
-    const stored = localStorage.getItem(SYNC_QUEUE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  }
+  // ✅ Actual sync process
+  private syncWithServer(): void {
+    if (!navigator.onLine || this.syncQueue.length === 0) return;
+    this.syncing$.next(true);
 
-  private updateSyncQueue(queue: SyncAction[]) {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
-  }
+    const queueCopy = [...this.syncQueue];
+    const updatedTasks = [...this.tasksSubject.value];
 
-  private enqueueSync(action: SyncAction) {
-    const queue = this.getSyncQueue();
-    queue.push(action);
-    this.updateSyncQueue(queue);
-  }
-
-  private syncWithServer() {
-    const queue = this.getSyncQueue();
-    if (queue.length === 0) return;
-
-    // 🔁 تنفيذ كل عمليات المزامنة واحدة تلو الأخرى
-    const processNext = () => {
-      if (queue.length === 0) {
-        this.updateSyncQueue([]);
-        this.loadTasks(); // 🔁 إعادة تحميل البيانات من الخادم بعد التزامن
+    const processNext = (): void => {
+      if (queueCopy.length === 0) {
+        this.syncQueue = [];
+        this.saveToLocalStorage();
+        this.loadFromServer();
+        this.syncing$.next(false);
         return;
       }
-
-      const action = queue.shift()!;
-      switch (action.type) {
+      const action = queueCopy.shift();
+      switch (action!.type) {
         case 'add':
-          this.http.post<Task>(this.apiUrl, action.payload).subscribe({
+          this.http.post<Task>(this.apiUrl, action!.payload).subscribe({
             next: () => processNext(),
-            error: () => {
-              queue.unshift(action);
-              this.updateSyncQueue(queue);
-            }
+            error: () => processNext(), // 📌 ignore error during sync
           });
           break;
         case 'toggle':
-          this.http.put(`${this.apiUrl}/${action.payload.id}`, action.payload).subscribe({
+          this.http.put<Task>(`${this.apiUrl}/${action!.payload.id}`, action!.payload).subscribe({
             next: () => processNext(),
-            error: () => {
-              queue.unshift(action);
-              this.updateSyncQueue(queue);
-            }
+            error: () => processNext(),
           });
           break;
         case 'delete':
-          this.http.delete(`${this.apiUrl}/${action.payload}`).subscribe({
+          this.http.delete(`${this.apiUrl}/${action!.payload.id}`).subscribe({
             next: () => processNext(),
-            error: () => {
-              queue.unshift(action);
-              this.updateSyncQueue(queue);
-            }
+            error: () => processNext(),
           });
           break;
       }
@@ -113,37 +90,34 @@ export class TaskService {
     processNext();
   }
 
-  loadTasks(): void {
-    if (this.isOnline) {
-      this.http.get<Task[]>(this.apiUrl).subscribe({
-        next: (tasks) => {
-          this.tasksSubject.next(tasks);
-          this.saveToLocalStorage(tasks);
-        },
-        error: () => {
-          const local = this.loadFromLocalStorage();
-          this.tasksSubject.next(local);
-        }
-      });
-    } else {
-      const local = this.loadFromLocalStorage();
-      this.tasksSubject.next(local);
-    }
+  // ✅ Reload from server (used to resolve conflicts)
+  private loadFromServer(): void {
+    this.http.get<Task[]>(this.apiUrl).subscribe({
+      next: (tasks) => {
+        this.tasksSubject.next(tasks);
+        this.saveToLocalStorage();
+      }
+    });
   }
 
+  // ✅ Add task
   addTask(title: string): void {
-    const newTask: Task = { id: Date.now(), title, completed: false }; // ⚠️ id مؤقت
-    const updatedTasks = [...this.tasksSubject.value, newTask];
-    this.tasksSubject.next(updatedTasks);
-    this.saveToLocalStorage(updatedTasks);
+    const newTask: Task = {
+      id: Date.now(),
+      title,
+      completed: false
+    };
+    const current = [...this.tasksSubject.value, newTask];
+    this.tasksSubject.next(current);
+    this.saveToLocalStorage();
 
-    if (this.isOnline) {
+    if (navigator.onLine) {
       this.http.post<Task>(this.apiUrl, newTask).subscribe({
-        next: (taskFromServer) => this.loadTasks(),
-        error: () => this.enqueueSync({ type: 'add', payload: newTask })
+        next: () => this.loadFromServer(),
+        error: () => this.queueSync('add', newTask),
       });
     } else {
-      this.enqueueSync({ type: 'add', payload: newTask });
+      this.queueSync('add', newTask);
     }
   }
 
@@ -152,32 +126,39 @@ export class TaskService {
     const task = current.find(t => t.id === id);
     if (!task) return;
     const updated = { ...task, completed: !task.completed };
-    const updatedList = current.map(t => (t.id === id ? updated : t));
-    this.tasksSubject.next(updatedList);
-    this.saveToLocalStorage(updatedList);
+    const newList = current.map(t => t.id === id ? updated : t);
+    this.tasksSubject.next(newList);
+    this.saveToLocalStorage();
 
-    if (this.isOnline) {
-      this.http.put(`${this.apiUrl}/${id}`, updated).subscribe({
-        next: () => {},
-        error: () => this.enqueueSync({ type: 'toggle', payload: updated })
+    if (navigator.onLine) {
+      this.http.put<Task>(`${this.apiUrl}/${id}`, updated).subscribe({
+        next: () => this.loadFromServer(),
+        error: () => this.queueSync('toggle', updated),
       });
     } else {
-      this.enqueueSync({ type: 'toggle', payload: updated });
+      this.queueSync('toggle', updated);
     }
   }
 
   deleteTask(id: number): void {
-    const updatedList = this.tasksSubject.value.filter(t => t.id !== id);
-    this.tasksSubject.next(updatedList);
-    this.saveToLocalStorage(updatedList);
+    const filtered = this.tasksSubject.value.filter(t => t.id !== id);
+    this.tasksSubject.next(filtered);
+    this.saveToLocalStorage();
 
-    if (this.isOnline) {
+    if (navigator.onLine) {
       this.http.delete(`${this.apiUrl}/${id}`).subscribe({
-        next: () => {},
-        error: () => this.enqueueSync({ type: 'delete', payload: id })
+        next: () => this.loadFromServer(),
+        error: () => this.queueSync('delete', { id }),
       });
     } else {
-      this.enqueueSync({ type: 'delete', payload: id });
+      this.queueSync('delete', { id });
     }
+  }
+
+  // ✅ Queue sync
+  private queueSync(type: SyncAction['type'], payload: any): void {
+    this.syncQueue.push({ type, payload });
+    this.saveToLocalStorage();
+    this.syncing$.next(true);
   }
 }
