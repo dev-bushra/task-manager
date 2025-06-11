@@ -15,10 +15,9 @@ metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-#  👇 أضف الكود دا مباشرة بعد إنشاء app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],  # هنا تحط عنوان الـ frontend بتاعك
+    allow_origins=["*"],  # أو ضع نطاق Vercel فقط لتحكم أفضل
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
