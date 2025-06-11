@@ -87,3 +87,36 @@ Task.id يجب أن يكون number وليس string (راجع الخطأ الس�
 ✅ إشعار للمستخدم عند وجود مزامنة.
 
 ✅ جلب النسخة النهائية من السيرفر لحل أي تعارضات.
+
+#######
+
+📦 مشروعك: FastAPI داخل مجلد backend
+✅ ملف render.yaml جاهز:
+📝 أنشئ هذا الملف في جذر المشروع (يعني في نفس مكان مجلد backend) باسم:
+
+render.yaml
+
+yaml
+Copy
+Edit
+services:
+  - type: web
+    name: task-manager-backend
+    env: python
+    region: oregon  # أو غيرها حسب أقرب منطقة ليك
+    branch: main
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: DATABASE_URL
+        value: <ضع رابط PostgreSQL من Supabase>
+      - key: OTHER_ENV_VAR
+        value: <قيمة أخرى لو عندك .env>
+📌 شرح سريع:
+السطر	المعنى
+type: web	خدمة ويب (تسمع على HTTP)
+rootDir: backend	مجلد المشروع الحقيقي اللي فيه requirements.txt و main.py
+buildCommand	يأمر Render يثبت المتطلبات
+startCommand	يأمره يشغل uvicorn على main.py
+envVars	هنا تضع كل متغيرات البيئة المهمة زي DATABASE_URL
