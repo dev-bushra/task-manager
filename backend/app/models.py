@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String, Boolean
-from .database import Base
+from sqlalchemy import Table, Column, Integer, String, Boolean
+from .database import metadata
 
-class Task(Base):
-    __tablename__ = "tasks"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=True)
-    completed = Column(Boolean, default=False)
+tasks = Table(
+    "tasks",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("title", String, nullable=False),
+    Column("description", String),
+    Column("completed", Boolean, default=False),
+)

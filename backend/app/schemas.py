@@ -1,3 +1,4 @@
+# app/schemas.py
 from pydantic import BaseModel
 from typing import Optional
 
@@ -17,5 +18,3 @@ class TaskInDB(TaskBase):
 
     class Config:
         orm_mode = True
-
-# DB schema
