@@ -13,10 +13,10 @@ build/
 
 # Virtual environment
 venv/
-env/
-ENV/
 .venv/
-.ENV/
+# env/
+# ENV/
+# .ENV/
 
 # VSCode settings
 .vscode/
@@ -61,8 +61,8 @@ __fastapi__/
 .fastapi*
 
 # dotenv
-.env
-.env.*
+# .env
+# .env.*
 
 # OS-specific
 .DS_Store
