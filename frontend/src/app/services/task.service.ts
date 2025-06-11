@@ -1,164 +1,134 @@
 // 🔁 Replace the current localStorage logic with real API calls
-// 🧠 هدفنا: تطبيق Offline-First بالكامل عبر LocalStorage + قائمة انتظار Sync
-// With conflict resolution + sync message broadcast
 
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, fromEvent, merge, of } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { Task } from '../models/task.model';
 import { environment } from 'src/environments/environment';
-
-interface SyncAction {
-  type: 'add' | 'toggle' | 'delete';
-  payload: any;
-}
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private tasksSubject = new BehaviorSubject<Task[]>([]);
   public tasksObservable$: Observable<Task[]> = this.tasksSubject.asObservable();
-  public syncing$ = new BehaviorSubject<boolean>(false); // 🔄 expose syncing status
-
   private apiUrl = `${environment.apiUrl}/tasks`;
-  private syncQueue: SyncAction[] = [];
-  private localStorageKey = 'offline_tasks';
-  private syncQueueKey = 'sync_queue';
+
+  private syncingSubject = new BehaviorSubject<boolean>(false);
+  public syncing$ = this.syncingSubject.asObservable();
+
+  private syncQueue: any[] = [];
+  private isOnline = navigator.onLine;
 
   constructor(private http: HttpClient) {
-    this.loadFromLocalStorage();
-    this.setupSyncOnReconnect();
-    this.syncWithServer();
+    window.addEventListener('online', () => this.onReconnect());
+    this.loadFromLocalStorage(); // ✅ أولوية التحميل من التخزين المحلي
+    this.loadFromServer();       // ثم تحميل النسخة الأحدث من السيرفر
   }
 
-  // ✅ Load from local storage
   private loadFromLocalStorage(): void {
-    const tasks = JSON.parse(localStorage.getItem(this.localStorageKey) || '[]');
-    this.tasksSubject.next(tasks);
-    this.syncQueue = JSON.parse(localStorage.getItem(this.syncQueueKey) || '[]');
+    const local = localStorage.getItem('tasks');
+    if (local) {
+      const tasks = JSON.parse(local);
+      this.tasksSubject.next(tasks);
+    }
   }
 
-  // ✅ Save tasks and sync queue
-  private saveToLocalStorage(): void {
-    localStorage.setItem(this.localStorageKey, JSON.stringify(this.tasksSubject.value));
-    localStorage.setItem(this.syncQueueKey, JSON.stringify(this.syncQueue));
+  private saveToLocalStorage(tasks: Task[]): void {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
   }
 
-  // ✅ Sync trigger on reconnect
-  private setupSyncOnReconnect(): void {
-    fromEvent(window, 'online').subscribe(() => this.syncWithServer());
-  }
-
-  // ✅ Actual sync process
-  private syncWithServer(): void {
-    if (!navigator.onLine || this.syncQueue.length === 0) return;
-    this.syncing$.next(true);
-
-    const queueCopy = [...this.syncQueue];
-    const updatedTasks = [...this.tasksSubject.value];
-
-    const processNext = (): void => {
-      if (queueCopy.length === 0) {
-        this.syncQueue = [];
-        this.saveToLocalStorage();
-        this.loadFromServer();
-        this.syncing$.next(false);
-        return;
-      }
-      const action = queueCopy.shift();
-      switch (action!.type) {
-        case 'add':
-          this.http.post<Task>(this.apiUrl, action!.payload).subscribe({
-            next: () => processNext(),
-            error: () => processNext(), // 📌 ignore error during sync
-          });
-          break;
-        case 'toggle':
-          this.http.put<Task>(`${this.apiUrl}/${action!.payload.id}`, action!.payload).subscribe({
-            next: () => processNext(),
-            error: () => processNext(),
-          });
-          break;
-        case 'delete':
-          this.http.delete(`${this.apiUrl}/${action!.payload.id}`).subscribe({
-            next: () => processNext(),
-            error: () => processNext(),
-          });
-          break;
-      }
-    };
-
-    processNext();
-  }
-
-  // ✅ Reload from server (used to resolve conflicts)
   private loadFromServer(): void {
     this.http.get<Task[]>(this.apiUrl).subscribe({
       next: (tasks) => {
         this.tasksSubject.next(tasks);
-        this.saveToLocalStorage();
-      }
+        this.saveToLocalStorage(tasks);
+      },
+      error: (err) => console.error('Error loading from server:', err)
     });
   }
 
-  // ✅ Add task
-  addTask(title: string): void {
-    const newTask: Task = {
-      id: Date.now(),
-      title,
-      completed: false
-    };
-    const current = [...this.tasksSubject.value, newTask];
-    this.tasksSubject.next(current);
-    this.saveToLocalStorage();
+  private onReconnect(): void {
+    if (this.syncQueue.length > 0) {
+      this.syncingSubject.next(true);
+      this.processSyncQueue().then(() => {
+        this.loadFromServer();
+        this.syncingSubject.next(false);
+      });
+    }
+  }
 
-    if (navigator.onLine) {
+  private async processSyncQueue(): Promise<void> {
+    for (const item of this.syncQueue) {
+      const { type, data } = item;
+      try {
+        if (type === 'add') {
+          await this.http.post(this.apiUrl, data).toPromise();
+        } else if (type === 'toggle') {
+          await this.http.put(`${this.apiUrl}/${data.id}`, data).toPromise();
+        } else if (type === 'delete') {
+          await this.http.delete(`${this.apiUrl}/${data.id}`).toPromise();
+        }
+      } catch (err) {
+        console.error('Sync failed:', err);
+      }
+    }
+    this.syncQueue = [];
+  }
+
+  addTask(title: string): void {
+    const newTask = { title, completed: false } as Partial<Task>;
+    const current = this.tasksSubject.value;
+
+    const optimistic = { ...newTask, id: Date.now() } as Task;
+    this.tasksSubject.next([...current, optimistic]);
+    this.saveToLocalStorage([...current, optimistic]);
+
+    if (this.isOnline) {
       this.http.post<Task>(this.apiUrl, newTask).subscribe({
         next: () => this.loadFromServer(),
-        error: () => this.queueSync('add', newTask),
+        error: () => this.queueOfflineAction('add', newTask)
       });
     } else {
-      this.queueSync('add', newTask);
+      this.queueOfflineAction('add', newTask);
     }
   }
 
   toggleTask(id: number): void {
-    const current = [...this.tasksSubject.value];
+    const current = this.tasksSubject.value;
     const task = current.find(t => t.id === id);
     if (!task) return;
-    const updated = { ...task, completed: !task.completed };
-    const newList = current.map(t => t.id === id ? updated : t);
-    this.tasksSubject.next(newList);
-    this.saveToLocalStorage();
 
-    if (navigator.onLine) {
-      this.http.put<Task>(`${this.apiUrl}/${id}`, updated).subscribe({
+    const updated = { ...task, completed: !task.completed };
+    const updatedList = current.map(t => (t.id === id ? updated : t));
+    this.tasksSubject.next(updatedList);
+    this.saveToLocalStorage(updatedList);
+
+    if (this.isOnline) {
+      this.http.put(`${this.apiUrl}/${id}`, updated).subscribe({
         next: () => this.loadFromServer(),
-        error: () => this.queueSync('toggle', updated),
+        error: () => this.queueOfflineAction('toggle', updated)
       });
     } else {
-      this.queueSync('toggle', updated);
+      this.queueOfflineAction('toggle', updated);
     }
   }
 
   deleteTask(id: number): void {
-    const filtered = this.tasksSubject.value.filter(t => t.id !== id);
-    this.tasksSubject.next(filtered);
-    this.saveToLocalStorage();
+    const current = this.tasksSubject.value.filter(t => t.id !== id);
+    this.tasksSubject.next(current);
+    this.saveToLocalStorage(current);
 
-    if (navigator.onLine) {
+    if (this.isOnline) {
       this.http.delete(`${this.apiUrl}/${id}`).subscribe({
         next: () => this.loadFromServer(),
-        error: () => this.queueSync('delete', { id }),
+        error: () => this.queueOfflineAction('delete', { id })
       });
     } else {
-      this.queueSync('delete', { id });
+      this.queueOfflineAction('delete', { id });
     }
   }
 
-  // ✅ Queue sync
-  private queueSync(type: SyncAction['type'], payload: any): void {
-    this.syncQueue.push({ type, payload });
-    this.saveToLocalStorage();
-    this.syncing$.next(true);
+  private queueOfflineAction(type: string, data: any): void {
+    this.syncQueue.push({ type, data });
+    this.syncingSubject.next(true);
   }
 }
