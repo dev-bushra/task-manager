@@ -1,11 +1,14 @@
 // 🔁 Replace the current localStorage logic with real API calls
 // ✅ إضافة ميزة التخزين المحلي LocalStorage
 
+
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { Task } from '../models/task.model';
 import { environment } from 'src/environments/environment';
+
+const LOCAL_STORAGE_KEY = 'tasks';
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
@@ -17,9 +20,27 @@ export class TaskService {
     this.loadTasks();
   }
 
+  private saveToLocalStorage(tasks: Task[]) {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+  }
+
+  private loadFromLocalStorage(): Task[] {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  }
+
   loadTasks(): void {
+    const localTasks = this.loadFromLocalStorage();
+    if (localTasks.length > 0) {
+      this.tasksSubject.next(localTasks);
+    }
+
+    // يمكن جعل هذا اختياريًا أو لإعادة التزامن فقط
     this.http.get<Task[]>(this.apiUrl).subscribe({
-      next: (tasks) => this.tasksSubject.next(tasks),
+      next: (tasks) => {
+        this.tasksSubject.next(tasks);
+        this.saveToLocalStorage(tasks);
+      },
       error: (err) => console.error('Error loading tasks:', err)
     });
   }
@@ -29,7 +50,9 @@ export class TaskService {
     this.http.post<Task>(this.apiUrl, newTask).subscribe({
       next: (task) => {
         const current = this.tasksSubject.value;
-        this.tasksSubject.next([...current, task]);
+        const updated = [...current, task];
+        this.tasksSubject.next(updated);
+        this.saveToLocalStorage(updated);
       },
       error: (err) => console.error('Error adding task:', err)
     });
@@ -40,10 +63,12 @@ export class TaskService {
     const task = current.find(t => t.id === id);
     if (!task) return;
     const updated = { ...task, completed: !task.completed };
+
     this.http.put<Task>(`${this.apiUrl}/${id}`, updated).subscribe({
       next: () => {
         const updatedList = current.map(t => (t.id === id ? updated : t));
         this.tasksSubject.next(updatedList);
+        this.saveToLocalStorage(updatedList);
       },
       error: (err) => console.error('Error toggling task:', err)
     });
@@ -54,6 +79,7 @@ export class TaskService {
       next: () => {
         const filtered = this.tasksSubject.value.filter(t => t.id !== id);
         this.tasksSubject.next(filtered);
+        this.saveToLocalStorage(filtered);
       },
       error: (err) => console.error('Error deleting task:', err)
     });
