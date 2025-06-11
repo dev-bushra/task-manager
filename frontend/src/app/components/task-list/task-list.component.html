@@ -1,0 +1,54 @@
+<div class="m-0 p-6 bg-white shadow-lg rounded-xl min-h-[85vh] max-h-[85vh]">
+  <!-- <h1 class="text-2xl font-bold mb-4 text-center flex items-center justify-center gap-2"><h1 class="inline font-semibold text-blue-600">📝 AB</h1> <span class="text-gray-200 text-sm font-extralight">|</span> <h1 class=" inline  font-light text-red-400">To Do</h1></h1> -->
+
+  <div class="flex gap-2 mb-4">
+    <input
+      [(ngModel)]="newTask"
+      placeholder="📋  Add New Task"
+      class="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring"
+    />
+    <button
+      (click)="addTask()"
+      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+    >
+      ╋
+    </button>
+  </div>
+
+  <ng-container *ngIf="tasksObservable$ | async as tasks">
+    <ul
+      *ngIf="tasks.length > 0; else empty"
+      class="max-h-[70vh] overflow-y-auto"
+    >
+      <li
+        *ngFor="let task of tasksObservable$ | async"
+        class="flex justify-between items-center py-2 border-b"
+      >
+        <span
+          (click)="toggleTask(task.id)"
+          [ngClass]="{ 'line-through text-gray-500': task.completed }"
+          class="cursor-pointer"
+        >
+         🎯 {{ task.title }}
+        </span>
+        <button
+          (click)="deleteTask(task.id)"
+          class="text-red-500 hover:text-red-700"
+        >
+          🗑️
+        </button>
+      </li>
+    </ul>
+  </ng-container>
+
+  <ng-template #empty>
+    <div
+      class="w-full min-h-[50vh] max-h-[50vh] flex items-center justify-center mx-auto"
+    >
+      <span class="text-center text-gray-400 font-sans font-normal text-sm"
+        >Oops! 😅 No tasks yet..<br />
+        maybe add one?</span
+      >
+    </div>
+  </ng-template>
+</div>
