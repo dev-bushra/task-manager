@@ -19,7 +19,7 @@ Added detailed logging and error handling.
 Tested connection and APIs locally and deployed.
 
 Steps to Build
-Setup virtual environment and install dependencies from requirements.txt.
+Setup virtual environment and install dependencies from requirements - txt.
 
 Configure .env file with your Supabase DB connection string and credentials.
 
@@ -67,7 +67,7 @@ source venv/bin/activate       # Linux/Mac
 venv\Scripts\activate          # Windows
 
 # 2. Install dependencies
-pip install -r requirements.txt
+pip install -r requirements - txt
 
 # 3. Configure environment variables
 # Create .env file with:
@@ -177,7 +177,7 @@ source venv/bin/activate       # لينكس / ماك
 venv\Scripts\activate          # ويندوز
 
 # 2. تنصيب الحزم
-pip install -r requirements.txt
+pip install -r requirements - txt
 
 # 3. إعداد متغيرات البيئة
 # أنشئ ملف .env يحتوي:
