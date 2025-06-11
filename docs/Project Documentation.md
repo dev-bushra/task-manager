@@ -70,6 +70,7 @@ venv\Scripts\activate          # Windows
 <!-- pip install -r requirements -->
 
 # 3. Configure environment variables
+# DataBase : https://supabase.com/dashboard/project/yxmqkppyxzerltffexom
 # Create .env file with:
 DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.yxmqkppyxzerltffexom.supabase.co:5432/postgres"
 
