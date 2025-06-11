@@ -1,49 +1,30 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
-import { Task } from '../models/task.model';
+// 🔁 Replace the current localStorage logic with real API calls
 
-const TASKS_STORAGE_KEY = 'taskmaster-tasks'; // 🔑 unique key for localStorage
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { Task } from '../models/task.model';
+import { environment } from 'src/environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
-  
-  private tasks = new BehaviorSubject<Task[]>(this.loadTasksFromStorage()); // all tasks saved here (localStorage)
-  // private tasks = new BehaviorSubject<Task[]>([]); // all tasks saved here (main tasks list)
-  tasksObservable$ = this.tasks.asObservable(); // for read-only and subscriptions
+  private readonly API = environment.apiUrl + '/tasks';  // 👈 e.g. /tasks
 
-  constructor() {
-    // 🧠 Subscribe to every task change and persist to localStorage
-    this.tasks.subscribe(updatedTasks => {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(updatedTasks));
-    });
-  }
- 
-  addTask(title: string) {
-    const newTask: Task = {
-      id: Date.now(), title, completed: false
-    };
-    this.tasks.next([...this.tasks.value, newTask]);
+  constructor(private http: HttpClient) {}
+
+  getTasks(): Observable<Task[]> {
+    return this.http.get<Task[]>(this.API);
   }
 
-  toggleTask(id: number) {
-    const updated = this.tasks.value.map(task => 
-      task.id === id
-      ?
-      {...task, completed: !task.completed } : task
-    );
-    this.tasks.next(updated)
+  addTask(title: string): Observable<Task> {
+    return this.http.post<Task>(this.API, { title });
   }
 
-  removeTask(id: number) {
-    const updated = this.tasks.value.filter(task => task.id !== id);
-    this.tasks.next(updated);
+  toggleTask(id: number): Observable<Task> {
+    return this.http.put<Task>(`${this.API}/${id}/toggle`, {});
   }
 
-  // 🧠 Load from localStorage (if any)
-  private loadTasksFromStorage(): Task[] {
-    const raw = localStorage.getItem(TASKS_STORAGE_KEY); // Get the data with unique key TASKS_STORAGE_KEY
-    console.log('LocalStorage Data: ', raw);
-    return raw ? JSON.parse(raw) : []; // return the data that coming form localStorage in JSON format
+  removeTask(id: number): Observable<any> {
+    return this.http.delete(`${this.API}/${id}`);
   }
-
 }
