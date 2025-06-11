@@ -10,7 +10,7 @@ import { environment } from 'src/environments/environment';
 export class TaskService {
   private tasksSubject = new BehaviorSubject<Task[]>([]);
   public tasksObservable$: Observable<Task[]> = this.tasksSubject.asObservable();
-  private apiUrl = `${environment.apiUrl}/tasks`;
+  private apiUrl = `${environment.apiUrl}tasks`;
 
   private syncingSubject = new BehaviorSubject<boolean>(false);
   public syncing$ = this.syncingSubject.asObservable();
