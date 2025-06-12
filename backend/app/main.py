@@ -18,6 +18,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # أو ضع نطاق Vercel فقط لتحكم أفضل
+    # allow_origins=["https://task-manager-fastapi.vercel.app"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
